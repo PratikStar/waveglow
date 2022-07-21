@@ -27,16 +27,20 @@
 import argparse
 import json
 import os
+import sys
 import torch
 
 #=====START: ADDED FOR DISTRIBUTED======
-from distributed import init_distributed, apply_gradient_allreduce, reduce_tensor
-from torch.utils.data.distributed import DistributedSampler
+# from distributed import init_distributed, apply_gradient_allreduce, reduce_tensor
+# from torch.utils.data.distributed import DistributedSampler
 #=====END:   ADDED FOR DISTRIBUTED======
 
 from torch.utils.data import DataLoader
 from glow import WaveGlow, WaveGlowLoss
 from mel2samp import Mel2Samp
+sys.path.insert(0, '/Users/pratik/repos/TimbreSpace')
+from datasets import AudioSTFTDataModule
+from utils import dotdict
 
 def load_checkpoint(checkpoint_path, model, optimizer):
     assert os.path.isfile(checkpoint_path)
@@ -52,7 +56,7 @@ def load_checkpoint(checkpoint_path, model, optimizer):
 def save_checkpoint(model, optimizer, learning_rate, iteration, filepath):
     print("Saving model and optimizer state at iteration {} to {}".format(
           iteration, filepath))
-    model_for_saving = WaveGlow(**waveglow_config).cuda()
+    model_for_saving = WaveGlow(**waveglow_config).cpu()
     model_for_saving.load_state_dict(model.state_dict())
     torch.save({'model': model_for_saving,
                 'iteration': iteration,
@@ -70,7 +74,7 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
     #=====END:   ADDED FOR DISTRIBUTED======
 
     criterion = WaveGlowLoss(sigma)
-    model = WaveGlow(**waveglow_config).cuda()
+    model = WaveGlow(**waveglow_config).cpu()
 
     #=====START: ADDED FOR DISTRIBUTED======
     if num_gpus > 1:
@@ -90,15 +94,18 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
                                                       optimizer)
         iteration += 1  # next iteration is iteration + 1
 
-    trainset = Mel2Samp(**data_config)
+    # trainset = Mel2Samp(**data_config)
+    data = AudioSTFTDataModule(config = dotdict({'dataset_path': '../../data/timbre', 'stft': {'frame_size': 512, 'hop_length': 256, 'segment_duration': 0.18575}, 'saver': {'enabled': False, 'save_dir': '../out'}, 'visualizer': {'enabled': False, 'save_dir': '../out'}, 'csv': {'enabled': True, 'path': '../log'}, 'batch_size': 16, 'num_workers': 0}))
+    data.setup()
+    train_loader = data.train_dataloader()
     # =====START: ADDED FOR DISTRIBUTED======
-    train_sampler = DistributedSampler(trainset) if num_gpus > 1 else None
+    # train_sampler = DistributedSampler(trainset) if num_gpus > 1 else None
     # =====END:   ADDED FOR DISTRIBUTED======
-    train_loader = DataLoader(trainset, num_workers=1, shuffle=False,
-                              sampler=train_sampler,
-                              batch_size=batch_size,
-                              pin_memory=False,
-                              drop_last=True)
+    # train_loader = DataLoader(trainset, num_workers=1, shuffle=False,
+    #                           sampler=train_sampler,
+    #                           batch_size=batch_size,
+    #                           pin_memory=False,
+    #                           drop_last=True)
 
     # Get shared output_directory ready
     if rank == 0:
@@ -119,10 +126,15 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
         for i, batch in enumerate(train_loader):
             model.zero_grad()
 
-            mel, audio = batch
-            mel = torch.autograd.Variable(mel.cuda())
-            audio = torch.autograd.Variable(audio.cuda())
+            mel, audio, _, _, _, _ = batch
+            mel = torch.squeeze(mel, 0)
+            mel = torch.squeeze(mel, 1)
+            audio = torch.squeeze(audio, 0)
+            audio = torch.squeeze(audio, 1)
+            mel = torch.autograd.Variable(mel.cpu())
+            audio = torch.autograd.Variable(audio.cpu())
             outputs = model((mel, audio))
+
 
             loss = criterion(outputs)
             if num_gpus > 1:

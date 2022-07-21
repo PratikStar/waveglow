@@ -24,19 +24,24 @@
 #  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 # *****************************************************************************
+# python3 inference.py -f <(ls mel_spectrograms/*.pt) -w waveglow_256channels_universal_v5.pt -o . -s 0.6
 import os
+import sys
 from scipy.io.wavfile import write
 import torch
 from mel2samp import files_to_list, MAX_WAV_VALUE
 from denoiser import Denoiser
 
+sys.path.insert(0, '/Users/pratik/repos/TimbreSpace')
+from datasets import AudioSTFTDataModule
+from utils import dotdict
 
-def main(mel_files, waveglow_path, sigma, output_dir, sampling_rate, is_fp16,
+def main(waveglow_path, sigma, output_dir, sampling_rate, is_fp16,
          denoiser_strength):
-    mel_files = files_to_list(mel_files)
+    # mel_files = files_to_list(mel_files)
     waveglow = torch.load(waveglow_path)['model']
     waveglow = waveglow.remove_weightnorm(waveglow)
-    waveglow.cuda().eval()
+    waveglow.cpu().eval()
     if is_fp16:
         from apex import amp
         waveglow, _ = amp.initialize(waveglow, [], opt_level="O3")
@@ -44,31 +49,69 @@ def main(mel_files, waveglow_path, sigma, output_dir, sampling_rate, is_fp16,
     if denoiser_strength > 0:
         denoiser = Denoiser(waveglow).cuda()
 
-    for i, file_path in enumerate(mel_files):
-        file_name = os.path.splitext(os.path.basename(file_path))[0]
-        mel = torch.load(file_path)
-        mel = torch.autograd.Variable(mel.cuda())
-        mel = torch.unsqueeze(mel, 0)
+    data = AudioSTFTDataModule(config = dotdict({'dataset_path': '../../data/timbre', 'stft': {'frame_size': 512, 'hop_length': 256, 'segment_duration': 0.18575}, 'saver': {'enabled': False, 'save_dir': '../out'}, 'visualizer': {'enabled': False, 'save_dir': '../out'}, 'csv': {'enabled': True, 'path': '../log'}, 'batch_size': 16, 'num_workers': 0}))
+    data.setup()
+    train_loader = data.train_dataloader()
+
+    for i, batch in enumerate(train_loader):
+        # file_name = os.path.splitext(os.path.basename(file_path))[0]
+        # mel = torch.load(file_path)
+        # mel = torch.autograd.Variable(mel.cpu())
+        mel, audio, _, _, clipname, offset = batch
+        mel = torch.squeeze(mel, 0)
+        mel = torch.squeeze(mel, 1)
+        # audio = torch.squeeze(audio, 0)
+        # audio = torch.squeeze(audio, 1)
+        mel = torch.autograd.Variable(mel.cpu())
+        # audio = torch.autograd.Variable(audio.cpu())
+        # mel=mel[0]
+        mel_batch = []
+        for k in range(mel.shape[0]):
+            mel_batch.append(mel[k])
+        mel_batch = tuple(mel_batch)
+        mel_batch = torch.cat(mel_batch, 1)
+
+        audio = torch.squeeze(audio)
+        offset = float(offset.cpu().numpy())
+        clipname = clipname[0]
+        # mel = torch.unsqueeze(mel, 0)
         mel = mel.half() if is_fp16 else mel
         with torch.no_grad():
-            audio = waveglow.infer(mel, sigma=sigma)
+            audio_recons = waveglow.infer(mel, sigma=sigma)
+            print(f"inference: {audio_recons.shape}")
             if denoiser_strength > 0:
-                audio = denoiser(audio, denoiser_strength)
-            audio = audio * MAX_WAV_VALUE
-        audio = audio.squeeze()
-        audio = audio.cpu().numpy()
-        audio = audio.astype('int16')
+                audio_recons = denoiser(audio_recons, denoiser_strength)
+            audio_recons = audio_recons * MAX_WAV_VALUE
+        audio_recons = audio_recons.squeeze()
+
+        audio_recons_batch = []
+        audio_batch = []
+        for k in range(audio_recons.shape[0]):
+            audio_recons_batch.append(audio_recons[k])
+            audio_batch.append(audio[k])
+        audio_recons_batch = torch.cat(tuple(audio_recons_batch), 0)
+        audio_batch = torch.cat(tuple(audio_batch), 0)
+
+        audio_batch = audio_batch.cpu().numpy()
+        audio_recons_batch = audio_recons_batch.cpu().numpy()
+        audio_recons_batch = audio_recons_batch.astype('int16')
+
+
         audio_path = os.path.join(
-            output_dir, "{}_synthesis.wav".format(file_name))
-        write(audio_path, sampling_rate, audio)
+            output_dir, "{}-{:.2f}.wav".format(clipname, offset))
+        audio_path_recons = os.path.join(
+            output_dir, "{}-{:.2f}_synthesis.wav".format(clipname, offset))
+        write(audio_path, sampling_rate, audio_batch)
+        write(audio_path_recons, sampling_rate, audio_recons_batch)
         print(audio_path)
+        # break
 
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-f', "--filelist_path", required=True)
+    # parser.add_argument('-f', "--filelist_path", required=True)
     parser.add_argument('-w', '--waveglow_path',
                         help='Path to waveglow decoder checkpoint with model')
     parser.add_argument('-o', "--output_dir", required=True)
@@ -80,5 +123,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(args.filelist_path, args.waveglow_path, args.sigma, args.output_dir,
+    main(
+        # args.filelist_path,
+         args.waveglow_path, args.sigma, args.output_dir,
          args.sampling_rate, args.is_fp16, args.denoiser_strength)
