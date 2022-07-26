@@ -34,7 +34,8 @@ import torch
 import torch.distributed as dist
 from torch.autograd import Variable
 
-def reduce_tensor(tensor, num_gpus):
+def reduce_tensor(tensor, num_gpus, rank, epoch, iteration):
+    print(f"In all_reduce, rank: {rank}, epoch: {epoch}, iteration: {iteration}")
     rt = tensor.clone()
     dist.all_reduce(rt, op=dist.reduce_op.SUM)
     rt /= num_gpus
@@ -42,7 +43,7 @@ def reduce_tensor(tensor, num_gpus):
 
 def init_distributed(rank, num_gpus, group_name, dist_backend, dist_url):
     assert torch.cuda.is_available(), "Distributed mode requires CUDA."
-    print("Initializing Distributed")
+    print(f"Initializing Distributed. rank: {rank}")
 
     # Set cuda device so everything is done on the right GPU.
     torch.cuda.set_device(rank % torch.cuda.device_count())
@@ -142,8 +143,8 @@ def apply_gradient_allreduce(module):
     return module
 
 
-def main(config, stdout_dir, args_str):
-    args_list = ['train.py']
+def main(config, stdout_dir, args_str, wisteria_jobid):
+    args_list = ['train_ljspeech.py']
     args_list += args_str.split(' ') if len(args_str) > 0 else []
 
     args_list.append('--config={}'.format(config))
@@ -158,10 +159,11 @@ def main(config, stdout_dir, args_str):
 
     workers = []
 
-    for i in range(num_gpus):
+    for i in range(4):
+        print(f"GPU #{i}")
         args_list[-2] = '--rank={}'.format(i)
-        stdout = None if i == 0 else open(
-            os.path.join(stdout_dir, "GPU_{}.log".format(i)), "w")
+        stdout = open(
+            os.path.join(stdout_dir, "checkpoints", f"job_{wisteria_jobid}", f"GPU_{i}.log"), "w")
         print(args_list)
         p = subprocess.Popen([str(sys.executable)]+args_list, stdout=stdout)
         workers.append(p)
@@ -180,5 +182,8 @@ if __name__ == '__main__':
         '-a', '--args_str', type=str, default='',
         help='double quoted string with space separated key value pairs')
 
+    wisteria_jobid = os.environ.get('PJM_SUBJOBID', None)
+
     args = parser.parse_args()
-    main(args.config, args.stdout_dir, args.args_str)
+    print(args) # To save config info in logs
+    main(args.config, args.stdout_dir, args.args_str, wisteria_jobid)

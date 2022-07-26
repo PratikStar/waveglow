@@ -4,6 +4,7 @@
 .idea
 .pt
 .wav
+.log
 __pycache__
 checkpoints
 checkpointsw
