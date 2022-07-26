@@ -95,7 +95,7 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
         print(f"Loading model from: {checkpoint_path}")
         model, optimizer, iteration = load_checkpoint(checkpoint_path, model,
                                                       optimizer)
-        print(f"iteration: {iteration}")
+        print(f"Resuming from iteration: {iteration}")
         iteration += 1  # next iteration is iteration + 1
 
     # trainset = Mel2Samp(**data_config)
