@@ -9,11 +9,14 @@ cd /Users/pratik/data/timbre
 rsync -av "/Users/pratik/data/timbre" w:/work/gk77/k77021/data
 
 # 3. checkpoint from wisteria
+
 watch -d -n5 "rsync -av w:/work/gk77/k77021/repos/waveglow/checkpoints \"/Users/pratik/repos/waveglow/checkpointsw\""
+# Rsync. Better than scp
 rsync -av w:/work/gk77/k77021/repos/waveglow/checkpoints "/Users/pratik/repos/waveglow/checkpointsw"
+# SCP one file
 scp w:/work/gk77/k77021/repos/waveglow/checkpoints/waveglow_4000 /Users/pratik/repos/waveglow/checkpointsw/checkpoints
 
-# logs from wisteria
+# 4. Only events/logs from wisteria
 watch -d -n5 "rsync -av w:/work/gk77/k77021/repos/waveglow/checkpoints/logs \"/Users/pratik/repos/waveglow/checkpointsw/checkpoints\""
 
 ```
