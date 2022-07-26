@@ -39,7 +39,7 @@ from utils import dotdict
 def main(waveglow_path, sigma, output_dir, sampling_rate, is_fp16,
          denoiser_strength):
     # mel_files = files_to_list(mel_files)
-    waveglow = torch.load(waveglow_path)['model']
+    waveglow = torch.load(waveglow_path, map_location=torch.device('cpu'))['model']
     waveglow = waveglow.remove_weightnorm(waveglow)
     waveglow.cpu().eval()
     if is_fp16:
@@ -49,7 +49,17 @@ def main(waveglow_path, sigma, output_dir, sampling_rate, is_fp16,
     if denoiser_strength > 0:
         denoiser = Denoiser(waveglow).cuda()
 
-    data = AudioSTFTDataModule(config = dotdict({'dataset_path': '../../data/timbre', 'stft': {'frame_size': 512, 'hop_length': 256, 'segment_duration': 0.18575}, 'saver': {'enabled': False, 'save_dir': '../out'}, 'visualizer': {'enabled': False, 'save_dir': '../out'}, 'csv': {'enabled': True, 'path': '../log'}, 'batch_size': 16, 'num_workers': 0}))
+    data = AudioSTFTDataModule(config = dotdict(
+        {'dataset_path': '../../data/timbre',
+         'stft': {'frame_size': 512, 'hop_length': 256, 'segment_duration': 0.18575},
+         'saver': {'enabled': False, 'save_dir': '../out'},
+         'visualizer': {'enabled': False, 'save_dir': '../out'},
+         'csv': {'enabled': True, 'path': '../log'},
+         'batch_size': 16,
+         'num_workers': 0,
+         # 'music_vae': {'checkpoint_path': '/work/gk77/k77021/repos/TimbreSpace/logs/MusicVAEFlat/version_11/checkpoints/last.ckpt'}
+         'music_vae': {'checkpoint_path': '/Users/pratik/repos/TimbreSpace/logw/logs/MusicVAEFlat/version_11/checkpoints/last.ckpt'}
+         }))
     data.setup()
     train_loader = data.train_dataloader()
 
@@ -57,7 +67,7 @@ def main(waveglow_path, sigma, output_dir, sampling_rate, is_fp16,
         # file_name = os.path.splitext(os.path.basename(file_path))[0]
         # mel = torch.load(file_path)
         # mel = torch.autograd.Variable(mel.cpu())
-        mel, audio, _, _, clipname, offset = batch
+        mel, audio, _, _, clipname, _, offset = batch
         mel = torch.squeeze(mel, 0)
         mel = torch.squeeze(mel, 1)
         # audio = torch.squeeze(audio, 0)
