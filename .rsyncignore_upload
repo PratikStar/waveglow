@@ -1,7 +1,6 @@
 *.ckpt
 *.log
 *.pt
-*.wav
 .DS_Store
 .git
 .idea
@@ -9,11 +8,9 @@ __pycache__
 assets
 checkpoints
 checkpointsw
-data
 logs
 mel_spectrograms
 out
 samples
 sliding
-tacotron2
 venv

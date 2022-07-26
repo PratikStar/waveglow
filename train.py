@@ -31,8 +31,9 @@ import sys
 import torch
 
 #=====START: ADDED FOR DISTRIBUTED======
-# from distributed import init_distributed, apply_gradient_allreduce, reduce_tensor
-# from torch.utils.data.distributed import DistributedSampler
+from distributed import apply_gradient_allreduce
+import torch.distributed as dist
+from torch.utils.data.distributed import DistributedSampler
 #=====END:   ADDED FOR DISTRIBUTED======
 
 from torch.utils.data import DataLoader
@@ -41,6 +42,26 @@ sys.path.insert(0, '/Users/pratik/repos/TimbreSpace')
 sys.path.insert(0, '/work/gk77/k77021/repos/TimbreSpace')
 from datasets import AudioSTFTDataModule
 from utils import dotdict
+
+def init_distributed(hparams, n_gpus, rank, group_name):
+    assert torch.cuda.is_available(), "Distributed mode requires CUDA."
+    print("Initializing Distributed")
+
+    # Set cuda device so everything is done on the right GPU.
+    torch.cuda.set_device(rank % torch.cuda.device_count())
+
+    # Initialize distributed communication
+    dist.init_process_group(
+        backend=hparams.dist_backend, init_method=hparams.dist_url,
+        world_size=n_gpus, rank=rank, group_name=group_name)
+
+    print("Done initializing distributed")
+
+def reduce_tensor(tensor, n_gpus):
+    rt = tensor.clone()
+    dist.all_reduce(rt, op=dist.reduce_op.SUM)
+    rt /= n_gpus
+    return rt
 
 def load_checkpoint(checkpoint_path, model, optimizer):
     assert os.path.isfile(checkpoint_path)

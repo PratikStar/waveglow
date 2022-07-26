@@ -5,4 +5,4 @@
 #PJM -j
 
 # run commands
-python train.py -c config.json
+python train_ljspeech.py -c config.json

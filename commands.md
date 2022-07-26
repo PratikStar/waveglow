@@ -2,22 +2,22 @@
 ```
 # 1. Rsync repo
 cd /Users/pratik/repos/waveglow
-watch -d -n5 "rsync -av --exclude-from=\".rsyncignore_upload\" \"/Users/pratik/repos/waveglow\" w:/work/gk77/k77021/repos"
+watch -d -n5 "rsync -avz --exclude-from=\".rsyncignore_upload\" \"/Users/pratik/repos/waveglow\" w:/work/gk77/k77021/repos"
 
 # 2. Rsync data
 cd /Users/pratik/data/timbre
-rsync -av "/Users/pratik/data/timbre" w:/work/gk77/k77021/data
+rsync -avz "/Users/pratik/data/timbre" w:/work/gk77/k77021/data
 
 # 3. checkpoint from wisteria
 
-watch -d -n5 "rsync -av w:/work/gk77/k77021/repos/waveglow/checkpoints \"/Users/pratik/repos/waveglow/checkpointsw\""
+watch -d -n5 "rsync -avz w:/work/gk77/k77021/repos/waveglow/checkpoints \"/Users/pratik/repos/waveglow/checkpointsw\""
 # Rsync. Better than scp
-rsync -av w:/work/gk77/k77021/repos/waveglow/checkpoints "/Users/pratik/repos/waveglow/checkpointsw"
+rsync -avz w:/work/gk77/k77021/repos/waveglow/checkpoints "/Users/pratik/repos/waveglow/checkpointsw"
 # SCP one file
 scp w:/work/gk77/k77021/repos/waveglow/checkpoints/waveglow_4000 /Users/pratik/repos/waveglow/checkpointsw/checkpoints
 
 # 4. Only events/logs from wisteria
-watch -d -n5 "rsync -av w:/work/gk77/k77021/repos/waveglow/checkpoints/logs \"/Users/pratik/repos/waveglow/checkpointsw/checkpoints\""
+watch -d -n5 "rsync -avz w:/work/gk77/k77021/repos/waveglow/checkpoints/logs \"/Users/pratik/repos/waveglow/checkpointsw/checkpoints\""
 
 ```
 # Notes
