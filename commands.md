@@ -12,7 +12,7 @@ rsync -avz "/Users/pratik/data/timbre" w:/work/gk77/k77021/data
 
 watch -d -n5 "rsync -avz w:/work/gk77/k77021/repos/waveglow/checkpoints \"/Users/pratik/repos/waveglow/checkpointsw\""
 # Rsync. Better than scp
-rsync -avz w:/work/gk77/k77021/repos/waveglow/checkpoints "/Users/pratik/repos/waveglow/checkpointsw"
+rsync -avz w:/work/gk77/k77021/repos/waveglow/checkpoints/job_478484/waveglow_33500 "/Users/pratik/repos/waveglow/checkpointsw/checkpoints/job_478484"
 # SCP one file
 scp w:/work/gk77/k77021/repos/waveglow/checkpoints/waveglow_4000 /Users/pratik/repos/waveglow/checkpointsw/checkpoints
 

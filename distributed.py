@@ -35,7 +35,7 @@ import torch.distributed as dist
 from torch.autograd import Variable
 
 def reduce_tensor(tensor, num_gpus, rank, epoch, iteration):
-    print(f"In all_reduce, rank: {rank}, epoch: {epoch}, iteration: {iteration}")
+    # print(f"In all_reduce, rank: {rank}, epoch: {epoch}, iteration: {iteration}")
     rt = tensor.clone()
     dist.all_reduce(rt, op=dist.reduce_op.SUM)
     rt /= num_gpus
@@ -159,11 +159,15 @@ def main(config, stdout_dir, args_str, wisteria_jobid):
 
     workers = []
 
+    log_dir = os.path.join(stdout_dir, "checkpoints", f"job_{wisteria_jobid}")
+    if not os.path.isdir(log_dir):
+        os.makedirs(log_dir)
+        os.chmod(log_dir, 0o775)
     for i in range(4):
         print(f"GPU #{i}")
         args_list[-2] = '--rank={}'.format(i)
         stdout = open(
-            os.path.join(stdout_dir, "checkpoints", f"job_{wisteria_jobid}", f"GPU_{i}.log"), "w")
+            os.path.join(log_dir, f"GPU_{i}.log"), "w")
         print(args_list)
         p = subprocess.Popen([str(sys.executable)]+args_list, stdout=stdout)
         workers.append(p)

@@ -1,6 +1,6 @@
 #!/bin/bash
 #PJM -g gk77
-#PJM -L rscgrp=share-debug
+#PJM -L rscgrp=share
 #PJM -L gpu=4
 #PJM -N waveglow
 #PJM -j

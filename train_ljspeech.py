@@ -148,7 +148,6 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
 
             optimizer.step()
 
-            print("Rank: {}\tStep: {}\tLoss: {:.9f}".format(rank, iteration, reduced_loss))
             if with_tensorboard and rank == 0:
                 logger.add_scalar('training_loss', reduced_loss, i + len(train_loader) * epoch)
 
@@ -158,6 +157,7 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
                         output_directory, iteration)
                     save_checkpoint(model, optimizer, learning_rate, iteration,
                                     checkpoint_path, device)
+            print("Rank: {}\tEpoch:{}\tStep: {}\tLoss: {:.9f}".format(rank, epoch, iteration, reduced_loss))
 
             iteration += 1
 
