@@ -190,6 +190,7 @@ class WaveGlow(torch.nn.Module):
         self.n_early_size = n_early_size
         self.WN = torch.nn.ModuleList()
         self.convinv = torch.nn.ModuleList()
+        # self.device = device
 
         n_half = int(n_group/2)
 
@@ -216,6 +217,7 @@ class WaveGlow(torch.nn.Module):
         spect = self.upsample(spect)
         assert(spect.size(2) >= audio.size(1))
         if spect.size(2) > audio.size(1):
+            spect = spect[:, :, :audio.size(1)]
             spect = spect[:, :, :audio.size(1)]
 
         spect = spect.unfold(2, self.n_group, self.n_group).permute(0, 2, 1, 3)
@@ -249,7 +251,7 @@ class WaveGlow(torch.nn.Module):
         output_audio.append(audio)
         return torch.cat(output_audio,1), log_s_list, log_det_W_list
 
-    def infer(self, spect, sigma=1.0):
+    def infer(self, spect, sigma=1.0, device='cpu'):
         spect = self.upsample(spect)
         # trim conv artifacts. maybe pad spec to kernel multiple
         time_cutoff = self.upsample.kernel_size[0] - self.upsample.stride[0]
