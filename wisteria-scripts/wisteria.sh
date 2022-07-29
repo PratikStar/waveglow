@@ -1,7 +1,7 @@
 #!/bin/bash
 #PJM -g gk77
-#PJM -L rscgrp=share
-#PJM -L gpu=4
+#PJM -L rscgrp=regular-a
+#PJM -L node=1
 #PJM -N waveglow
 #PJM -j
 #PJM -m b

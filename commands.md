@@ -17,7 +17,7 @@ rsync -avz w:/work/gk77/k77021/repos/waveglow/checkpoints/job_478484/waveglow_33
 scp w:/work/gk77/k77021/repos/waveglow/checkpoints/waveglow_4000 /Users/pratik/repos/waveglow/checkpointsw/checkpoints
 
 # 4. Only events/logs from wisteria
-watch -d -n5 "rsync -avz w:/work/gk77/k77021/repos/waveglow/checkpoints/job_478301/logs \"/Users/pratik/repos/waveglow/checkpointsw/checkpoints/job_478301\""
+watch -d -n5 "rsync -avz w:/work/gk77/k77021/repos/waveglow/checkpoints/job_487830/logs \"/Users/pratik/repos/waveglow/checkpointsw/checkpoints/job_487830\""
 
 ```
 # Notes

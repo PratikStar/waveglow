@@ -144,7 +144,7 @@ def apply_gradient_allreduce(module):
 
 
 def main(config, stdout_dir, args_str, wisteria_jobid):
-    args_list = ['train_ljspeech.py']
+    args_list = ['train.py']
     args_list += args_str.split(' ') if len(args_str) > 0 else []
 
     args_list.append('--config={}'.format(config))
@@ -163,7 +163,7 @@ def main(config, stdout_dir, args_str, wisteria_jobid):
     if not os.path.isdir(log_dir):
         os.makedirs(log_dir)
         os.chmod(log_dir, 0o775)
-    for i in range(4):
+    for i in range(num_gpus):
         print(f"GPU #{i}")
         args_list[-2] = '--rank={}'.format(i)
         stdout = open(

@@ -30,11 +30,11 @@ import os
 import sys
 import torch
 
-#=====START: ADDED FOR DISTRIBUTED======
-from distributed import apply_gradient_allreduce
+# =====START: ADDED FOR DISTRIBUTED======
+from distributed import apply_gradient_allreduce, init_distributed, reduce_tensor
 import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
-#=====END:   ADDED FOR DISTRIBUTED======
+# =====END:   ADDED FOR DISTRIBUTED======
 
 from torch.utils.data import DataLoader
 from glow import WaveGlow, WaveGlowLoss
@@ -42,26 +42,9 @@ sys.path.insert(0, '/Users/pratik/repos/TimbreSpace')
 sys.path.insert(0, '/work/gk77/k77021/repos/TimbreSpace')
 from datasets import AudioSTFTDataModule
 from utils import dotdict
+from prodict import Prodict
 
-def init_distributed(hparams, n_gpus, rank, group_name):
-    assert torch.cuda.is_available(), "Distributed mode requires CUDA."
-    print("Initializing Distributed")
 
-    # Set cuda device so everything is done on the right GPU.
-    torch.cuda.set_device(rank % torch.cuda.device_count())
-
-    # Initialize distributed communication
-    dist.init_process_group(
-        backend=hparams.dist_backend, init_method=hparams.dist_url,
-        world_size=n_gpus, rank=rank, group_name=group_name)
-
-    print("Done initializing distributed")
-
-def reduce_tensor(tensor, n_gpus):
-    rt = tensor.clone()
-    dist.all_reduce(rt, op=dist.reduce_op.SUM)
-    rt /= n_gpus
-    return rt
 
 def load_checkpoint(checkpoint_path, model, optimizer):
     assert os.path.isfile(checkpoint_path)
@@ -70,19 +53,21 @@ def load_checkpoint(checkpoint_path, model, optimizer):
     optimizer.load_state_dict(checkpoint_dict['optimizer'])
     model_for_loading = checkpoint_dict['model']
     model.load_state_dict(model_for_loading.state_dict())
-    print("Loaded checkpoint '{}' (iteration {})" .format(
-          checkpoint_path, iteration))
+    print("Loaded checkpoint '{}' (iteration {})".format(
+        checkpoint_path, iteration))
     return model, optimizer, iteration
+
 
 def save_checkpoint(model, optimizer, learning_rate, iteration, filepath, device):
     print("Saving model and optimizer state at iteration {} to {}".format(
-          iteration, filepath))
-    model_for_saving = WaveGlow(**waveglow_config).to(device)
+        iteration, filepath))
+    model_for_saving = WaveGlow(**waveglow_config, **{"device": device}).to(device)
     model_for_saving.load_state_dict(model.state_dict())
     torch.save({'model': model_for_saving,
                 'iteration': iteration,
                 'optimizer': optimizer.state_dict(),
                 'learning_rate': learning_rate}, filepath)
+
 
 def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
           sigma, iters_per_checkpoint, batch_size, seed, fp16_run,
@@ -91,18 +76,18 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
     torch.cuda.manual_seed(seed)
     device = 'cpu' if num_gpus == 0 else 'cuda'
     print(f"device is {device}")
-    #=====START: ADDED FOR DISTRIBUTED======
+    # =====START: ADDED FOR DISTRIBUTED======
     if num_gpus > 1:
         init_distributed(rank, num_gpus, group_name, **dist_config)
-    #=====END:   ADDED FOR DISTRIBUTED======
+    # =====END:   ADDED FOR DISTRIBUTED======
 
     criterion = WaveGlowLoss(sigma)
     model = WaveGlow(**waveglow_config, **{"device": device}).to(device)
 
-    #=====START: ADDED FOR DISTRIBUTED======
+    # =====START: ADDED FOR DISTRIBUTED======
     if num_gpus > 1:
         model = apply_gradient_allreduce(model)
-    #=====END:   ADDED FOR DISTRIBUTED======
+    # =====END:   ADDED FOR DISTRIBUTED======
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -120,17 +105,31 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
         iteration += 1  # next iteration is iteration + 1
 
     # trainset = Mel2Samp(**data_config)
-    data = AudioSTFTDataModule(config = dotdict(
-        {'dataset_path': '../../data/timbre',
-         'stft': {'frame_size': 512, 'hop_length': 256, 'segment_duration': 0.18575},
-         'saver': {'enabled': False, 'save_dir': '../out'},
-         'visualizer': {'enabled': False, 'save_dir': '../out'},
-         'csv': {'enabled': True, 'path': '../log'},
-         'batch_size': 16,
-         'num_workers': 0,
-         'music_vae': {'checkpoint_path': '/work/gk77/k77021/repos/TimbreSpace/logs/MusicVAEFlat/version_11/checkpoints/last.ckpt'}
-         # 'music_vae': {'checkpoint_path': '/Users/pratik/repos/TimbreSpace/logw/logs/MusicVAEFlat/version_11/checkpoints/last.ckpt'}
-         }))
+    data = AudioSTFTDataModule(config = Prodict.from_dict(
+        {'timbre': {
+            'dataset_path': '../../data/timbre',
+            'batch_size': 16,
+            'num_workers': 0,
+            'spectrogram': {
+                  'type': 'mel',
+                  'stft': {
+                      'spectrogram_dims': [80, 63]},
+                  'mel': {
+                      'frame_size': 1024,
+                      'hop_length': 256,
+                      'spectrogram_dims': [80, 63],
+                      'segment_signal_length': 16000}},
+            'saver': {'enabled': False, 'save_dir': '../out'},
+            'visualizer': {'enabled': False, 'save_dir': '../out'},
+            'csv': {'enabled': True, 'path': '../log'}
+        },
+         'audio': 'reconstructed',
+         'music_vae': {
+             # 'checkpoint_path': '/Users/pratik/repos/TimbreSpace/logw/logs/MusicVAEFlat/version_14/checkpoints/last.ckpt'
+            'checkpoint_path': '/work/gk77/k77021/repos/TimbreSpace/logs/MusicVAEFlat/version_14/checkpoints/last.ckpt'
+        }
+        }
+    ))
     data.setup()
     train_loader = data.train_dataloader()
     # =====START: ADDED FOR DISTRIBUTED======
@@ -161,20 +160,17 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
         for i, batch in enumerate(train_loader):
             model.zero_grad()
 
-            mel, audio, _, _, _, key, _ = batch
+            mel, audio = batch
             # print(f"Key: {key.numpy()}")
             mel = torch.squeeze(mel, 0)
-            mel = torch.squeeze(mel, 1)
             audio = torch.squeeze(audio, 0)
-            audio = torch.squeeze(audio, 1)
             mel = torch.autograd.Variable(mel.to(device))
             audio = torch.autograd.Variable(audio.to(device))
             outputs = model((mel, audio))
 
-
             loss = criterion(outputs)
             if num_gpus > 1:
-                reduced_loss = reduce_tensor(loss.data, num_gpus).item()
+                reduced_loss = reduce_tensor(loss.data, num_gpus, rank, epoch, iteration).item()
             else:
                 reduced_loss = loss.item()
 
@@ -186,7 +182,6 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
 
             optimizer.step()
 
-            print("Step: {}\tLoss: {:.9f}".format(iteration, reduced_loss))
             if with_tensorboard and rank == 0:
                 logger.add_scalar('training_loss', reduced_loss, i + len(train_loader) * epoch)
 
@@ -196,8 +191,10 @@ def train(num_gpus, rank, group_name, output_directory, epochs, learning_rate,
                         output_directory, iteration)
                     save_checkpoint(model, optimizer, learning_rate, iteration,
                                     checkpoint_path, device)
+            print("Rank: {}\tEpoch:{}\tStep: {}\tLoss: {:.9f}".format(rank, epoch, iteration, reduced_loss))
 
             iteration += 1
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -220,10 +217,13 @@ if __name__ == "__main__":
     dist_config = config["dist_config"]
     global waveglow_config
     waveglow_config = config["waveglow_config"]
-    # global audiostft_config
-    # audiostft_config = config["audiostft_config"]
 
     num_gpus = torch.cuda.device_count()
+    print(f"Number of GPUs: {num_gpus}")
+    wisteria_jobid = os.environ.get('PJM_SUBJOBID', None)
+
+    if wisteria_jobid is not None:
+        train_config['output_directory'] = f"{train_config['output_directory']}/job_{wisteria_jobid}"
     if num_gpus > 1:
         if args.group_name == '':
             print("WARNING: Multiple GPUs detected but no distributed group set")
